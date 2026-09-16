@@ -11,7 +11,6 @@ in
 {
   system.nixos.distroId = "onixos";
   system.nixos.distroName = "oNixOs";
-  system.nixos.distroVersion = "1.0";
   system.nixos.tags = [ ];
   system.stateVersion = lib.mkDefault "26.05";
 
