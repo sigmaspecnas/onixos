@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import re
 import shutil
 import subprocess
@@ -64,47 +65,56 @@ def confirm_disk(path):
         sys.exit("aborted")
 
 
+def wipe_disk(path):
+    subprocess.run(["wipefs", "-a", path], check=True)
+
+
+def wait_for_partition(part):
+    import time
+    for _ in range(20):
+        if os.path.exists(part):
+            return
+        subprocess.run(["partprobe"], check=False)
+        subprocess.run(["udevadm", "settle"], check=False)
+        time.sleep(1)
+    raise FileNotFoundError(f"Partition {part} not found after 20s")
+
+
 def partition_ext4(path):
+    wipe_disk(path)
     subprocess.run(["parted", "-s", path, "mklabel", "gpt"], check=True)
     subprocess.run(
         ["parted", "-s", path, "mkpart", "primary", "ext4", "1MiB", "100%"],
         check=True,
     )
-    subprocess.run(["partprobe", path], check=True)
-    import time
-
-    time.sleep(2)
     part = f"{path}1"
+    wait_for_partition(part)
     subprocess.run(["mkfs.ext4", "-F", part], check=True)
     return part
 
 
 def partition_btrfs(path):
+    wipe_disk(path)
     subprocess.run(["parted", "-s", path, "mklabel", "gpt"], check=True)
     subprocess.run(
         ["parted", "-s", path, "mkpart", "primary", "btrfs", "1MiB", "100%"],
         check=True,
     )
-    subprocess.run(["partprobe", path], check=True)
-    import time
-
-    time.sleep(2)
     part = f"{path}1"
+    wait_for_partition(part)
     subprocess.run(["mkfs.btrfs", "-f", part], check=True)
     return part
 
 
 def partition_xfs(path):
+    wipe_disk(path)
     subprocess.run(["parted", "-s", path, "mklabel", "gpt"], check=True)
     subprocess.run(
         ["parted", "-s", path, "mkpart", "primary", "xfs", "1MiB", "100%"],
         check=True,
     )
-    subprocess.run(["partprobe", path], check=True)
-    import time
-
-    time.sleep(2)
     part = f"{path}1"
+    wait_for_partition(part)
     subprocess.run(["mkfs.xfs", "-f", part], check=True)
     return part
 
