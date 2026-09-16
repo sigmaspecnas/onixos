@@ -1,11 +1,10 @@
 {
-  pkgs,
   nixpkgs,
   onixModule,
   system,
   ...
 }:
-pkgs.lib.nixosSystem {
+nixpkgs.lib.nixosSystem {
   inherit system;
   modules = [
     "${nixpkgs}/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix"
@@ -13,7 +12,7 @@ pkgs.lib.nixosSystem {
     {
       onix.profile = "server";
       system.stateVersion = "26.05";
-      services.openssh.enable = pkgs.lib.mkForce false;
+      services.openssh.enable = nixpkgs.lib.mkForce false;
     }
   ];
 }
