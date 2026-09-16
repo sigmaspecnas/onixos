@@ -8,6 +8,7 @@
   outputs = { self, nixpkgs }:
     let
       system = "x86_64-linux";
+      pkgs = import nixpkgs { inherit system; };
 
       onixModule = import ./modules/onix/default.nix;
 
@@ -18,7 +19,7 @@
         };
 
       installIso = (import ./iso/iso.nix {
-        inherit nixpkgs onixModule system;
+        inherit pkgs nixpkgs onixModule system;
       }).config.system.build.isoImage;
     in
     {
