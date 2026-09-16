@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+sudo mkdir -p /etc/onixos /etc/nixos
+sudo nixos-generate-config --dir /etc/onixos
+sudo mv -f /etc/onixos/configuration.nix /etc/onixos/configuration.onix
+if [ ! -f /etc/nixos/configuration.nix ] || ! grep -q onixos /etc/nixos/configuration.nix; then
+  sudo tee /etc/nixos/configuration.nix > /dev/null <<'EOF'
+{ ... }:
+{
+  imports = [ /etc/onixos/configuration.onix ];
+}
+EOF
+fi
+echo "Config regenerated: /etc/onixos/configuration.onix"

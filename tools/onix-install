@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+import re
+import subprocess
+import sys
+
+CONFIG = "/etc/onixos/packages.onix"
+
+
+def read_names():
+    if not __import__("os").path.exists(CONFIG):
+        return []
+    with open(CONFIG, encoding="utf-8") as f:
+        body = f.read()
+    m = re.search(r"onix\.packages\s*=\s*\[(.*?)\];", body, re.S)
+    if not m:
+        return []
+    return re.findall(r'"([^"]+)"', m.group(1))
+
+
+def replace_names(names):
+    body = "{ ... }:\n{\n  onix.packages = [\n"
+    for name in sorted(set(names)):
+        body += f'    "{name}"\n'
+    body += "  ];\n}\n"
+    with open(CONFIG, "w", encoding="utf-8") as f:
+        f.write(body)
+
+
+def rebuild():
+    subprocess.run(["sudo", "onix-rebuild"], check=True)
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("usage: onix-install <package> [package ...]")
+        sys.exit(1)
+    names = sys.argv[1:]
+    current = read_names()
+    existing = [n for n in names if n in current]
+    new = [n for n in names if n not in current]
+    if new:
+        replace_names(current + new)
+        print(f"installing: {', '.join(new)}")
+        rebuild()
+    if existing:
+        already = ", ".join(existing)
+        print(f"already installed: {already}")
+
+
+if __name__ == "__main__":
+    main()

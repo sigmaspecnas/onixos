@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+import re
+import shutil
+import subprocess
+import sys
+
+TEMPLATE_MODULES = "/etc/onix/templates/modules"
+DEST = "/mnt/etc/onixos"
+DISKS = None
+
+
+def banner():
+    try:
+        with open("/etc/onix/ascii-art.txt", encoding="utf-8") as f:
+            print(f.read())
+    except OSError:
+        pass
+    print("=== oNixOs installer ===\n")
+
+
+def ask(prompt, choices):
+    print(prompt)
+    for i, choice in enumerate(choices, 1):
+        print(f"  [{i}] {choice}")
+    while True:
+        raw = input("> ").strip()
+        if raw.isdigit() and 1 <= int(raw) <= len(choices):
+            return choices[int(raw) - 1]
+        print("invalid choice, try again")
+
+
+def get_disks():
+    out = subprocess.check_output(
+        ["lsblk", "-rno", "NAME,SIZE,TYPE,MOUNTPOINT"], text=True
+    )
+    disks = []
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[2] == "disk":
+            name, size, _type = parts[0], parts[1], parts[3] if len(parts) > 3 else ""
+            disks.append((f"/dev/{name}", size))
+    return disks
+
+
+def select_disk():
+    disks = get_disks()
+    if not disks:
+        print("no disks found!")
+        sys.exit(1)
+    labels = [f"{path} ({size})" for path, size in disks]
+    chosen = ask("Select installation disk:", labels)
+    path = chosen.split(" ")[0]
+    global DISKS
+    DISKS = path
+    return path
+
+
+def confirm_disk(path):
+    answer = ask(
+        f"WARNING: all data on {path} will be destroyed. Continue?",
+        ["yes", "no"],
+    )
+    if answer != "yes":
+        sys.exit("aborted")
+
+
+def partition_ext4(path):
+    subprocess.run(["parted", "-s", path, "mklabel", "gpt"], check=True)
+    subprocess.run(
+        ["parted", "-s", path, "mkpart", "primary", "ext4", "1MiB", "100%"],
+        check=True,
+    )
+    subprocess.run(["partprobe", path], check=True)
+    import time
+
+    time.sleep(2)
+    part = f"{path}1"
+    subprocess.run(["mkfs.ext4", "-F", part], check=True)
+    return part
+
+
+def partition_btrfs(path):
+    subprocess.run(["parted", "-s", path, "mklabel", "gpt"], check=True)
+    subprocess.run(
+        ["parted", "-s", path, "mkpart", "primary", "btrfs", "1MiB", "100%"],
+        check=True,
+    )
+    subprocess.run(["partprobe", path], check=True)
+    import time
+
+    time.sleep(2)
+    part = f"{path}1"
+    subprocess.run(["mkfs.btrfs", "-f", part], check=True)
+    return part
+
+
+def partition_xfs(path):
+    subprocess.run(["parted", "-s", path, "mklabel", "gpt"], check=True)
+    subprocess.run(
+        ["parted", "-s", path, "mkpart", "primary", "xfs", "1MiB", "100%"],
+        check=True,
+    )
+    subprocess.run(["partprobe", path], check=True)
+    import time
+
+    time.sleep(2)
+    part = f"{path}1"
+    subprocess.run(["mkfs.xfs", "-f", part], check=True)
+    return part
+
+
+def mount_root(part):
+    subprocess.run(["mkdir", "-p", "/mnt"], check=True)
+    subprocess.run(["mount", part, "/mnt"], check=True)
+
+
+def make_config(settings):
+    user_block = ""
+    if settings["user"]:
+        user_block = (
+            f"""
+  users.users."{settings['user']}" = {{
+    isNormalUser = true;
+    extraGroups = [ "wheel" ];
+    initialPassword = "{settings['user_password']}";
+  }};
+"""
+        )
+    locale = settings["locale"]
+    keymap = "ru" if locale.startswith("ru") else "us"
+    tz = "Europe/Moscow" if locale.startswith("ru") else "UTC"
+    return f"""{{ config, ... }}:
+{{
+  imports = [
+    ./modules/onix
+    ./hardware-configuration.nix
+    ./packages.onix
+  ];
+
+  onix.profile = "{settings['profile']}";
+  onix.gpu = "{settings['gpu']}";
+
+  boot.loader.grub.device = "{settings['disk']}";
+
+  networking.hostName = "{settings['hostname']}";
+
+  i18n.defaultLocale = "{locale}";
+  console.keyMap = "{keymap}";
+  time.timeZone = "{tz}";
+
+  users.users.root.initialPassword = "{settings['root_password']}";
+{user_block}}}
+"""
+
+
+def write_packages_file():
+    with open(f"{DEST}/packages.onix", "w", encoding="utf-8") as f:
+        f.write("{ ... }:\n{\n  onix.packages = [\n  ];\n}\n")
+
+
+def main():
+    banner()
+
+    disk = select_disk()
+    confirm_disk(disk)
+
+    fs = ask("Select filesystem:", ["ext4", "btrfs", "xfs"])
+    if fs == "ext4":
+        part = partition_ext4(disk)
+    elif fs == "btrfs":
+        part = partition_btrfs(disk)
+    else:
+        part = partition_xfs(disk)
+
+    mount_root(part)
+
+    shutil.rmtree(DEST, ignore_errors=True)
+    shutil.copytree(TEMPLATE_MODULES, f"{DEST}/modules")
+
+    profile = ask(
+        "Select desktop environment:",
+        ["GNOME", "KDE Plasma", "Hyprland", "server (no GUI)"],
+    )
+    profile = {
+        "GNOME": "gnome",
+        "KDE Plasma": "kde",
+        "Hyprland": "hyprland",
+        "server (no GUI)": "server",
+    }[profile]
+
+    gpu = ask(
+        "Select GPU driver config:",
+        ["auto", "intel", "amd", "nvidia"],
+    )
+
+    locale_raw = ask(
+        "Select locale:",
+        ["Russian (ru_RU.UTF-8)", "English (en_US.UTF-8)"],
+    )
+    locale = "ru_RU.UTF-8" if locale_raw.startswith("Russian") else "en_US.UTF-8"
+
+    hostname = input("Hostname [onixos]: ").strip() or "onixos"
+
+    root_password = input("Root password: ").strip()
+    if not root_password:
+        sys.exit("root password required")
+
+    user = input("Additional user name (empty to skip): ").strip() or None
+    user_password = ""
+    if user:
+        user_password = input("User password: ").strip()
+
+    settings = {
+        "disk": disk,
+        "fs": fs,
+        "profile": profile,
+        "gpu": gpu,
+        "locale": locale,
+        "hostname": hostname,
+        "root_password": root_password,
+        "user": user,
+        "user_password": user_password,
+    }
+
+    subprocess.run(["mkdir", "-p", DEST], check=True)
+    write_packages_file()
+
+    with open(f"{DEST}/configuration.onix", "w", encoding="utf-8") as f:
+        f.write(make_config(settings))
+
+    subprocess.run(
+        ["nixos-generate-config", "--root", "/mnt"], check=True
+    )
+    shutil.copy(
+        "/mnt/etc/nixos/hardware-configuration.nix",
+        f"{DEST}/hardware-configuration.nix",
+    )
+
+    subprocess.run(["mkdir", "-p", "/mnt/etc/nixos"], check=True)
+    with open("/mnt/etc/nixos/configuration.nix", "w", encoding="utf-8") as f:
+        f.write("""{ ... }:
+{
+  imports = [ /etc/onixos/configuration.onix ];
+}
+""")
+
+    print("\nInstalling oNixOs, this will take a while...\n")
+    subprocess.run(
+        ["nixos-install", "--root", "/mnt", "--no-root-passwd"],
+        check=True,
+    )
+
+    print("\noNixOs installed successfully. You can reboot now.")
+
+
+if __name__ == "__main__":
+    main()

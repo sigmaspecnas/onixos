@@ -5,3 +5,4 @@ result-*
 *.qcow2
 *.iso
 nixos.qcow2
+dist/
