@@ -1,30 +1,26 @@
 {
-  config,
   lib,
   ...
 }:
-let
-  profiles = {
-    gnome = ./profiles/gnome.nix;
-    kde = ./profiles/kde.nix;
-    hyprland = ./profiles/hyprland.nix;
-    server = ./profiles/server.nix;
-  };
-in
 {
   options.onix.profile = lib.mkOption {
-    type = lib.types.enum (lib.attrNames profiles);
+    type = lib.types.enum [
+      "gnome"
+      "kde"
+      "hyprland"
+      "server"
+    ];
     default = "gnome";
-    description = "Profile installed by default";
+    description = "Profile applied to the system";
   };
 
-  imports =
-    [
-      ./branding.nix
-      ./defaults.nix
-      ./packages.nix
-    ]
-    ++ [
-      profiles.${config.onix.profile}
-    ];
+  imports = [
+    ./branding.nix
+    ./defaults.nix
+    ./packages.nix
+    ./profiles/gnome.nix
+    ./profiles/kde.nix
+    ./profiles/hyprland.nix
+    ./profiles/server.nix
+  ];
 }
