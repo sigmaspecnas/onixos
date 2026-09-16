@@ -6,8 +6,19 @@ import subprocess
 import sys
 
 TEMPLATE_MODULES = "/etc/onix/templates/modules"
+TEMPLATE_ASSETS = "/etc/onix/templates/assets"
 DEST = "/mnt/etc/onixos"
-DISKS = None
+EFI = os.path.exists("/sys/firmware/efi")
+NIX_ENV = {
+    **os.environ,
+    "NIX_CONFIG": "experimental-features = nix-command flakes",
+}
+
+MKFS = {
+    "ext4": ["mkfs.ext4", "-F"],
+    "btrfs": ["mkfs.btrfs", "-f"],
+    "xfs": ["mkfs.xfs", "-f"],
+}
 
 
 def banner():
@@ -16,7 +27,8 @@ def banner():
             print(f.read())
     except OSError:
         pass
-    print("=== oNixOs installer ===\n")
+    print("=== oNixOs installer ===")
+    print("firmware: " + ("EFI" if EFI else "BIOS") + "\n")
 
 
 def ask(prompt, choices):
@@ -38,7 +50,7 @@ def get_disks():
     for line in out.splitlines():
         parts = line.split()
         if len(parts) >= 3 and parts[2] == "disk":
-            name, size, _type = parts[0], parts[1], parts[3] if len(parts) > 3 else ""
+            name, size = parts[0], parts[1]
             disks.append((f"/dev/{name}", size))
     return disks
 
@@ -51,8 +63,6 @@ def select_disk():
     labels = [f"{path} ({size})" for path, size in disks]
     chosen = ask("Select installation disk:", labels)
     path = chosen.split(" ")[0]
-    global DISKS
-    DISKS = path
     return path
 
 
@@ -80,48 +90,41 @@ def wait_for_partition(part):
     raise FileNotFoundError(f"Partition {part} not found after 20s")
 
 
-def partition_ext4(path):
-    wipe_disk(path)
+def partition(path, fs):
     subprocess.run(["parted", "-s", path, "mklabel", "gpt"], check=True)
+    if EFI:
+        subprocess.run(
+            ["parted", "-s", path, "mkpart", "ESP", "fat32", "1MiB", "513MiB"],
+            check=True,
+        )
+        subprocess.run(["parted", "-s", path, "set", "1", "esp", "on"], check=True)
+        subprocess.run(
+            ["parted", "-s", path, "mkpart", "primary", fs, "513MiB", "100%"],
+            check=True,
+        )
+        esp = f"{path}1"
+        root = f"{path}2"
+        wait_for_partition(esp)
+        wait_for_partition(root)
+        subprocess.run(["mkfs.fat", "-F", "32", esp], check=True)
+        subprocess.run(MKFS[fs] + [root], check=True)
+        return root, esp
     subprocess.run(
-        ["parted", "-s", path, "mkpart", "primary", "ext4", "1MiB", "100%"],
+        ["parted", "-s", path, "mkpart", "primary", fs, "1MiB", "100%"],
         check=True,
     )
     part = f"{path}1"
     wait_for_partition(part)
-    subprocess.run(["mkfs.ext4", "-F", part], check=True)
-    return part
+    subprocess.run(MKFS[fs] + [part], check=True)
+    return part, None
 
 
-def partition_btrfs(path):
-    wipe_disk(path)
-    subprocess.run(["parted", "-s", path, "mklabel", "gpt"], check=True)
-    subprocess.run(
-        ["parted", "-s", path, "mkpart", "primary", "btrfs", "1MiB", "100%"],
-        check=True,
-    )
-    part = f"{path}1"
-    wait_for_partition(part)
-    subprocess.run(["mkfs.btrfs", "-f", part], check=True)
-    return part
-
-
-def partition_xfs(path):
-    wipe_disk(path)
-    subprocess.run(["parted", "-s", path, "mklabel", "gpt"], check=True)
-    subprocess.run(
-        ["parted", "-s", path, "mkpart", "primary", "xfs", "1MiB", "100%"],
-        check=True,
-    )
-    part = f"{path}1"
-    wait_for_partition(part)
-    subprocess.run(["mkfs.xfs", "-f", part], check=True)
-    return part
-
-
-def mount_root(part):
+def mount_root(part, efi_part):
     subprocess.run(["mkdir", "-p", "/mnt"], check=True)
     subprocess.run(["mount", part, "/mnt"], check=True)
+    if efi_part:
+        subprocess.run(["mkdir", "-p", "/mnt/boot"], check=True)
+        subprocess.run(["mount", efi_part, "/mnt/boot"], check=True)
 
 
 def make_config(settings):
@@ -139,6 +142,13 @@ def make_config(settings):
     locale = settings["locale"]
     keymap = "ru" if locale.startswith("ru") else "us"
     tz = "Europe/Moscow" if locale.startswith("ru") else "UTC"
+    if EFI:
+        loader = (
+            "  boot.loader.systemd-boot.enable = true;\n"
+            "  boot.loader.efi.canTouchEfiVariables = true;\n"
+        )
+    else:
+        loader = f'  boot.loader.grub.device = "{settings["disk"]}";\n'
     return f"""{{ config, ... }}:
 {{
   imports = [
@@ -150,9 +160,7 @@ def make_config(settings):
   onix.profile = "{settings['profile']}";
   onix.gpu = "{settings['gpu']}";
 
-  boot.loader.grub.device = "{settings['disk']}";
-
-  networking.hostName = "{settings['hostname']}";
+{loader}  networking.hostName = "{settings['hostname']}";
 
   i18n.defaultLocale = "{locale}";
   console.keyMap = "{keymap}";
@@ -175,17 +183,14 @@ def main():
     confirm_disk(disk)
 
     fs = ask("Select filesystem:", ["ext4", "btrfs", "xfs"])
-    if fs == "ext4":
-        part = partition_ext4(disk)
-    elif fs == "btrfs":
-        part = partition_btrfs(disk)
-    else:
-        part = partition_xfs(disk)
+    root, esp = partition(disk, fs)
 
-    mount_root(part)
+    mount_root(root, esp)
 
     shutil.rmtree(DEST, ignore_errors=True)
+    subprocess.run(["mkdir", "-p", DEST], check=True)
     shutil.copytree(TEMPLATE_MODULES, f"{DEST}/modules")
+    shutil.copytree(TEMPLATE_ASSETS, f"{DEST}/assets")
 
     profile = ask(
         "Select desktop environment:",
@@ -232,14 +237,19 @@ def main():
         "user_password": user_password,
     }
 
-    subprocess.run(["mkdir", "-p", DEST], check=True)
     write_packages_file()
 
     with open(f"{DEST}/configuration.onix", "w", encoding="utf-8") as f:
         f.write(make_config(settings))
 
     subprocess.run(
-        ["nixos-generate-config", "--root", "/mnt"], check=True
+        ["ln", "-sfn", "/mnt/etc/onixos", "/etc/onixos"], check=True
+    )
+
+    subprocess.run(
+        ["nixos-generate-config", "--root", "/mnt"],
+        env=NIX_ENV,
+        check=True,
     )
     shutil.copy(
         "/mnt/etc/nixos/hardware-configuration.nix",
@@ -257,6 +267,7 @@ def main():
     print("\nInstalling oNixOs, this will take a while...\n")
     subprocess.run(
         ["nixos-install", "--root", "/mnt", "--no-root-passwd"],
+        env=NIX_ENV,
         check=True,
     )
 

@@ -30,8 +30,11 @@ nixpkgs.lib.nixosSystem {
         pkgs.parted
         pkgs.btrfs-progs
         pkgs.xfsprogs
+        pkgs.dosfstools
       ];
       environment.etc."onix/templates/modules".source = ../modules;
+      environment.etc."onix/templates/assets".source = ../assets;
+      nix.settings.experimental-features = [ "nix-command" "flakes" ];
     }
   ];
 }
