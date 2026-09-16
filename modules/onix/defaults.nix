@@ -25,9 +25,11 @@
     {
       system.stateVersion = "26.05";
 
+      nixpkgs.config.allowUnfree = true;
+
       environment.systemPackages = with pkgs; [
         firefox
-        wineWowPackages.stable
+        wineWow64Packages.stable
         git
         vscode
         curl
