@@ -10,7 +10,7 @@ lib.mkIf (config.onix.profile == "kde") {
   services.displayManager.sddm.enable = true;
 
   environment.systemPackages = with pkgs; [
-    kio-admin
+    kdePackages.kio-admin
     plasma-browser-integration
     papirus-icon-theme
   ];
