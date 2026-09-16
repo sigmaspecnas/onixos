@@ -24,9 +24,8 @@ in
 
   boot.loader.grub.splashImage = lib.mkDefault ../../assets/icon.png;
 
-  services.plymouth = {
+  boot.plymouth = {
     enable = lib.mkDefault true;
-    theme = lib.mkDefault "breeze";
-    themePackages = lib.mkDefault [ pkgs.breeze-plymouth ];
+    theme = lib.mkDefault "bgrt";
   };
 }
