@@ -53,6 +53,8 @@
       ];
 
       hardware.graphics.enable = true;
+
+      xdg.portal.enable = true;
     }
 
     (lib.mkIf (config.onix.gpu == "nvidia") {
