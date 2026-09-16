@@ -1,0 +1,7 @@
+result
+result-*
+.envrc
+.direnv
+*.qcow2
+*.iso
+nixos.qcow2
