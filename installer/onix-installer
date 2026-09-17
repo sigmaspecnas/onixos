@@ -7,7 +7,6 @@ import sys
 
 TEMPLATE_MODULES = "/etc/onix/templates/modules"
 TEMPLATE_ASSETS = "/etc/onix/templates/assets"
-TEMPLATE_TOOLS = "/etc/onix/templates/tools"
 DEST = "/mnt/etc/onixos"
 EFI = os.path.exists("/sys/firmware/efi")
 NIX_ENV = {
@@ -208,7 +207,6 @@ def main():
     subprocess.run(["mkdir", "-p", DEST], check=True)
     shutil.copytree(TEMPLATE_MODULES, f"{DEST}/modules")
     shutil.copytree(TEMPLATE_ASSETS, f"{DEST}/assets")
-    shutil.copytree(TEMPLATE_TOOLS, f"{DEST}/tools")
 
     profile = ask(
         "Select desktop environment:",

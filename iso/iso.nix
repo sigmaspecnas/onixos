@@ -34,7 +34,6 @@ nixpkgs.lib.nixosSystem {
       ];
       environment.etc."onix/templates/modules".source = ../modules;
       environment.etc."onix/templates/assets".source = ../assets;
-      environment.etc."onix/templates/tools".source = ../tools;
       nix.settings.experimental-features = [ "nix-command" "flakes" ];
     }
   ];
