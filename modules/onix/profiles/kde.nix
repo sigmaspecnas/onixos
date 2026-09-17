@@ -11,7 +11,7 @@ lib.mkIf (config.onix.profile == "kde") {
 
   environment.systemPackages = with pkgs; [
     kdePackages.kio-admin
-    plasma-browser-integration
+    kdePackages.plasma-browser-integration
     papirus-icon-theme
   ];
 }
