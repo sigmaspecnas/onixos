@@ -6,3 +6,4 @@ result-*
 *.iso
 nixos.qcow2
 dist/
+__pycache__/
