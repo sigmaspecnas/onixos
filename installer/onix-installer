@@ -76,7 +76,17 @@ def confirm_disk(path):
 
 
 def wipe_disk(path):
-    subprocess.run(["wipefs", "-a", path], check=True)
+    subprocess.run(
+        ["dd", "if=/dev/zero", f"of={path}", "bs=1M", "count=16", "status=none"],
+        check=True,
+    )
+    subprocess.run(["wipefs", "-a", "-f", path], check=False)
+
+
+def settle(path):
+    subprocess.run(["udevadm", "settle"], check=False)
+    subprocess.run(["partprobe", path], check=False)
+    subprocess.run(["udevadm", "settle"], check=False)
 
 
 def wait_for_partition(part):
@@ -108,6 +118,7 @@ def partition(path, fs):
         wait_for_partition(root)
         subprocess.run(["mkfs.fat", "-F", "32", esp], check=True)
         subprocess.run(MKFS[fs] + [root], check=True)
+        settle(path)
         return root, esp
     subprocess.run(
         ["parted", "-s", path, "mkpart", "primary", fs, "1MiB", "100%"],
@@ -116,12 +127,13 @@ def partition(path, fs):
     part = f"{path}1"
     wait_for_partition(part)
     subprocess.run(MKFS[fs] + [part], check=True)
+    settle(path)
     return part, None
 
 
-def mount_root(part, efi_part):
+def mount_root(part, efi_part, fstype):
     subprocess.run(["mkdir", "-p", "/mnt"], check=True)
-    subprocess.run(["mount", part, "/mnt"], check=True)
+    subprocess.run(["mount", "-t", fstype, part, "/mnt"], check=True)
     if efi_part:
         subprocess.run(["mkdir", "-p", "/mnt/boot"], check=True)
         subprocess.run(["mount", efi_part, "/mnt/boot"], check=True)
@@ -185,7 +197,11 @@ def main():
     fs = ask("Select filesystem:", ["ext4", "btrfs", "xfs"])
     root, esp = partition(disk, fs)
 
-    mount_root(root, esp)
+    mount_root(root, esp, fs)
+
+    if esp:
+        subprocess.run(["mkdir", "-p", "/mnt/boot"], check=True)
+        subprocess.run(["mount", "-t", "vfat", esp, "/mnt/boot"], check=True)
 
     shutil.rmtree(DEST, ignore_errors=True)
     subprocess.run(["mkdir", "-p", DEST], check=True)
