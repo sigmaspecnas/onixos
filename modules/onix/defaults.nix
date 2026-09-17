@@ -27,6 +27,8 @@
 
       nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
+      boot.kernelParams = [ "nohz=off" ];
+
       nixpkgs.config.allowUnfree = true;
 
       environment.systemPackages = with pkgs; [
