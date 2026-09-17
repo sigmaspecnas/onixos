@@ -21,7 +21,7 @@ in
 
   environment.systemPackages = [ onix-banner ];
 
-  boot.loader.grub.splashImage = lib.mkDefault ../../assets/icon.png;
+  boot.loader.grub.splashImage = lib.mkForce ../../assets/icon.png;
 
   boot.plymouth = {
     enable = lib.mkDefault true;
