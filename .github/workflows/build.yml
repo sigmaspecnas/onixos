@@ -15,15 +15,18 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v16
       - uses: DeterminateSystems/magic-nix-cache-action@v9
       - run: nix build .#default
-      - run: xz -9 -T0 result/iso/*.iso
+      - run: |
+          mkdir -p dist
+          cp result/iso/*.iso dist/
+          xz -9 -T0 dist/*.iso
       - uses: actions/upload-artifact@v4
         with:
           name: onixos-iso
-          path: result/iso/*.iso.xz
+          path: dist/*.iso.xz
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: "oNixOs build ${{ github.run_number }}"
           body: "Automated build from commit ${{ github.sha }}"
-          files: result/iso/*.iso.xz
+          files: dist/*.iso.xz
           make_latest: true
