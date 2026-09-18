@@ -18,11 +18,11 @@ jobs:
       - run: |
           mkdir -p dist
           cp result/iso/*.iso dist/
-          xz -9e dist/*.iso
+          split -b 2000M dist/*.iso dist/part_
       - uses: actions/upload-artifact@v4
         with:
           name: onixos-iso
-          path: dist/*.iso.xz
+          path: dist/part_*
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
@@ -30,11 +30,9 @@ jobs:
           body: |
             Automated build from commit ${{ github.sha }}
 
-            1. Download both part_aa and part_ab
-            2. Open the folder in cmd and run:
-            ```
-            copy /b part_aa + part_ab onixos-iso.img
-            ```
-            3. Flash onixos-iso.img to USB with Etcher or dd
-          files: dist/*.iso.xz
+            1. Download all part_* files
+            2. Open folder in cmd: type path in address bar, write cmd, Enter
+            3. Run: copy /b part_aa + part_ab onixos-iso.img
+            4. Flash onixos-iso.img to USB with Etcher or dd
+          files: dist/part_*
           make_latest: true
