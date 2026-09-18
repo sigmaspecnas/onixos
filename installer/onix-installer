@@ -121,10 +121,14 @@ def partition(path, fs):
         settle(path)
         return root, esp
     subprocess.run(
-        ["parted", "-s", path, "mkpart", "primary", fs, "1MiB", "100%"],
+        ["parted", "-s", path, "mkpart", "primary", "bios_grub", "1MiB", "2MiB"],
         check=True,
     )
-    part = f"{path}1"
+    subprocess.run(
+        ["parted", "-s", path, "mkpart", "primary", fs, "2MiB", "100%"],
+        check=True,
+    )
+    part = f"{path}2"
     wait_for_partition(part)
     subprocess.run(MKFS[fs] + [part], check=True)
     settle(path)
