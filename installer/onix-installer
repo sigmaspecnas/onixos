@@ -208,6 +208,15 @@ def main():
     shutil.copytree(TEMPLATE_MODULES, f"{DEST}/modules")
     shutil.copytree(TEMPLATE_ASSETS, f"{DEST}/assets")
 
+    branding = f"{DEST}/modules/onix/branding.nix"
+    if os.path.exists(branding):
+        with open(branding, "r") as f:
+            c = f.read()
+        c = c.replace("../../assets/", "/etc/onixos/assets/")
+        c = c.replace("lib.mkDefault", "lib.mkForce")
+        with open(branding, "w") as f:
+            f.write(c)
+
     profile = ask(
         "Select desktop environment:",
         ["GNOME", "KDE Plasma", "Hyprland", "server (no GUI)"],
