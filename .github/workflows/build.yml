@@ -18,15 +18,22 @@ jobs:
       - run: |
           mkdir -p dist
           cp result/iso/*.iso dist/
-          xz -9 -T0 dist/*.iso
+          split -b 1500M dist/*.iso dist/part_
       - uses: actions/upload-artifact@v4
         with:
           name: onixos-iso
-          path: dist/*.iso.xz
+          path: dist/part_*
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: "oNixOs build ${{ github.run_number }}"
-          body: "Automated build from commit ${{ github.sha }}"
-          files: dist/*.iso.xz
+          body: |
+            Automated build from commit ${{ github.sha }}
+
+            To assemble the ISO:
+            ```
+            cat onixos-iso.part_* > onixos-iso.img
+            ```
+            Then flash to USB with `dd` or Etcher.
+          files: dist/part_*
           make_latest: true
